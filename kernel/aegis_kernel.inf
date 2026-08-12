@@ -1,0 +1,39 @@
+; Aegis kernel mini-filter INF.
+; Installed with:  sc create aegis_kernel type= filesys binPath= "%windir%\system32\drivers\aegis_kernel.sys"
+;                   sc start aegis_kernel
+; The .sys must be TEST-SIGNED (see sign.cmd) and Test Signing mode enabled:
+;   bcdedit /set testsigning on   (reboot required)
+; No WHQL / EV certificate is required for development or personal use.
+
+[Version]
+Signature   = "$WINDOWS NT$"
+Class       = "ActivityMonitor"
+ClassGuid   = {b86dff51-a1b9-4aaf-802f-e64e6ea171f2}
+Provider    = %ProviderString%
+DriverVer   = 08/10/2026,2.1.0
+CatalogFile = aegis_kernel.cat
+
+[DestinationDirs]
+DefaultDestDir = 12                     ; %windir%\system32\drivers
+
+[DefaultInstall]
+CopyFiles = DefaultDestDir
+
+[DefaultInstall.Services]
+AddService = aegis_kernel,,Aegis_Service_Inst
+
+[DefaultUninstall]
+DelFiles = DefaultDestDir
+DelService = aegis_kernel
+
+[Aegis_Service_Inst]
+DisplayName    = %ServiceName%
+ServiceType    = 2                       ; SERVICE_FILE_SYSTEM_DRIVER
+StartType      = 3                       ; SERVICE_DEMAND_START (manual)
+ErrorControl   = 1                       ; SERVICE_ERROR_NORMAL
+ServiceBinary  = %12%\aegis_kernel.sys
+Dependencies   = FltMgr                   ; mini-filter manager
+
+[Strings]
+ProviderString = "Aegis Security"
+ServiceName    = "Aegis Kernel Shield"

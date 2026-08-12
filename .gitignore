@@ -1,0 +1,12 @@
+build/
+out/
+*.obj
+*.sys
+*.cat
+*.pfx
+*.cer
+aegis_test.*
+.vs/
+CMakeCache.txt
+CMakeFiles/
+*.user

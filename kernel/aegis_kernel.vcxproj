@@ -34,7 +34,8 @@
       <SubSystem>Native</SubSystem>
       <EntryPointSymbol>DriverEntry</EntryPointSymbol>
       <LinkIncremental>false</LinkIncremental>
-      <AdditionalOptions>/DRIVER /MANIFEST:NO %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/DRIVER %(AdditionalOptions)</AdditionalOptions>
+      <ManifestFile></ManifestFile>
       <OutputFile>$(OutDir)aegis_kernel.sys</OutputFile>
       <GenerateManifest>false</GenerateManifest>
     </Link>

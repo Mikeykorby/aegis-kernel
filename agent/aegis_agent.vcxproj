@@ -24,11 +24,13 @@
       <LanguageStandard>stdcpp17</LanguageStandard>
       <PreprocessorDefinitions>_WIN64;_UNICODE;UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
-      <AdditionalIncludeDirectories>$(SDK_INC)\um;$(SDK_INC)\shared;$(SDK_INC)\km;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <!-- aegis_common.h lives in ../kernel -->
+      <AdditionalIncludeDirectories>$(ProjectDir)..\kernel;$(SDK_INC)\um;$(SDK_INC)\shared;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
-      <AdditionalLibraryDirectories>$(SDK_UMLIB);$(SDK_KMLIB);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>fltLib.lib;bcrypt.lib;kernel32.lib;user32.lib;advapi32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <!-- fltlib.dll is loaded dynamically at runtime; only bcrypt + CRT user libs needed -->
+      <AdditionalLibraryDirectories>$(SDK_LIB);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>bcrypt.lib;kernel32.lib;user32.lib;advapi32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>Console</SubSystem>
     </Link>
   </ItemDefinitionGroup>

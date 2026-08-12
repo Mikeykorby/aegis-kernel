@@ -9,14 +9,15 @@
   <PropertyGroup Label="Globals">
     <ProjectGuid>{1A2B3C4D-0001-0002-0003-000000000001}</ProjectGuid>
     <RootNamespace>aegis_kernel</RootNamespace>
-    <TargetVersion>Windows10</TargetVersion>
-    <KernelBufferOverflowLib>$(SDK_KMLIB)\BufferOverflowK.lib</KernelBufferOverflowLib>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Label="Configuration">
     <Configuration>Release</Configuration>
     <Platform>x64</Platform>
     <PlatformToolset>v143</PlatformToolset>
+    <!-- Application + manual /DRIVER flags: we only have the WDK headers/libs
+         (NuGet), not the full WDK MSBuild driver targets, so we can't use
+         ConfigurationType=Driver. This pattern still yields a valid .sys. -->
     <ConfigurationType>Application</ConfigurationType>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
@@ -25,10 +26,10 @@
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>_WIN64;_KERNEL_MODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
-      <AdditionalIncludeDirectories>$(WDK_INC)\km;$(WDK_INC)\shared;$(SDK_INC)\shared;$(SDK_INC)\km;$(SDK_INC)\um;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(WDK_INC)\km;$(SDK_INC)\shared;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
-      <AdditionalLibraryDirectories>$(WDK_KMLIB);$(SDK_KMLIB);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(WDK_KMLIB);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>ntoskrnl.lib;fltMgr.lib;wdm.lib;BufferOverflowK.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>Native</SubSystem>
       <EntryPointSymbol>DriverEntry</EntryPointSymbol>

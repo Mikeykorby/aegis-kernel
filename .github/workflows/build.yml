@@ -23,31 +23,33 @@ jobs:
           Write-Host "MSBuild = $msb"
 
           # Windows SDK include + um libs (bcrypt.lib / kernel32.lib) for the agent.
-          # The agent loads fltlib.dll dynamically, so it needs NO user-mode WDK.
           $sdkInc = Get-Item "C:\Program Files (x86)\Windows Kits\10\Include\*" -ErrorAction SilentlyContinue `
                       | Sort-Object Name | Select-Object -Last 1
           if (-not $sdkInc) { throw "Windows SDK Include not found" }
           $SDK_INC = $sdkInc.FullName
 
-          # SDK um lib dir (versioned under Lib\<ver>\um\x64)
           $sdkLibRoot = Get-Item "C:\Program Files (x86)\Windows Kits\10\Lib\*" -ErrorAction SilentlyContinue `
                       | Sort-Object Name | Select-Object -Last 1
           $SDK_LIB = (Get-ChildItem $sdkLibRoot.FullName -Recurse -Directory -Filter x64 | Where-Object {
                           $_.Parent.Name -eq 'um' -and (Test-Path (Join-Path $_.FullName 'kernel32.lib'))
                        } | Select-Object -First 1).FullName
           if (-not $SDK_LIB) { throw "SDK um\x64 libs not found" }
-          echo "SDK_INC=$SDK_INC"   >> $env:GITHUB_OUTPUT
-          echo "SDK_LIB=$SDK_LIB"   >> $env:GITHUB_OUTPUT
+          echo "SDK_INC=$SDK_INC" >> $env:GITHUB_OUTPUT
+          echo "SDK_LIB=$SDK_LIB" >> $env:GITHUB_OUTPUT
           Write-Host "SDK_INC = $SDK_INC"
           Write-Host "SDK_LIB = $SDK_LIB"
 
           # Kernel-mode WDK package (km/fltKernel.h + km/x64/fltMgr.lib) for the driver.
-          nuget install Microsoft.Windows.WDK.x64 -Version 10.0.28000.2526 -ExcludeVersion -OutputDirectory wdkpkg | Out-Null
-          $pkg = (Get-ChildItem wdkpkg\Microsoft.Windows.WDK.x64 -Directory | Select-Object -First 1).FullName
+          # Download the NuGet directly (nuget.exe is not guaranteed on the runner).
+          $WDK_VER = "10.0.26100.6584"
+          $url = "https://api.nuget.org/v3-flatcontainer/microsoft.windows.wdk.x64/$WDK_VER/microsoft.windows.wdk.x64.$WDK_VER.nupkg"
+          Invoke-WebRequest -Uri $url -OutFile wdk.nupkg
+          Expand-Archive -Path wdk.nupkg -DestinationPath wdkpkg -Force
+          $pkg = (Get-ChildItem wdkpkg -Directory | Select-Object -First 1).FullName
+          # headers live at <pkg>/c/Include/<ver>/km ; libs at <pkg>/c/Lib/<ver>/km/x64
           $WDK_INC = (Get-ChildItem $pkg -Recurse -Directory -Filter km | Where-Object {
-                          (Test-Path (Join-Path $_.FullName 'fltKernel.h')) -and
-                          (Test-Path (Join-Path $_.Parent.FullName 'shared') -PathType Container)
-                       } | Select-Object -First 1).Parent.FullName
+                          (Test-Path (Join-Path $_.FullName 'fltKernel.h'))
+                       } | Select-Object -First 1).FullName
           $WDK_KMLIB = (Get-ChildItem $pkg -Recurse -Directory -Filter x64 | Where-Object {
                           $_.Parent.Name -eq 'km' -and (Test-Path (Join-Path $_.FullName 'fltMgr.lib'))
                        } | Select-Object -First 1).FullName
@@ -62,7 +64,7 @@ jobs:
         run: |
           $msb = "${{ steps.env.outputs.MSBUILD }}"
           & $msb kernel/aegis_kernel.vcxproj /p:Configuration=Release /p:Platform=x64 `
-               /p:WDK_INC="${{ steps.env.outputs.WDK_INC }}" /p:WDK_LIB="${{ steps.env.outputs.WDK_KMLIB }}"
+               /p:WDK_INC="${{ steps.env.outputs.WDK_INC }}" /p:WDK_KMLIB="${{ steps.env.outputs.WDK_KMLIB }}"
 
       - name: Build user-mode agent
         shell: pwsh

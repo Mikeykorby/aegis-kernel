@@ -36,6 +36,7 @@
       <LinkIncremental>false</LinkIncremental>
       <AdditionalOptions>/DRIVER %(AdditionalOptions)</AdditionalOptions>
       <OutputFile>$(OutDir)aegis_kernel.sys</OutputFile>
+      <GenerateManifest>false</GenerateManifest>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>

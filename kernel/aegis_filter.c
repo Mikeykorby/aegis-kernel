@@ -241,12 +241,18 @@ OB_PREOP_CALLBACK_STATUS AegisObPreOp(PVOID RegistrationContext,
         if (gProtPids[i] == targetPid) { protected = TRUE; break; }
     if (!protected) return OB_PREOP_SUCCESS;
 
-    /* Strip terminate / delete rights from the handle being opened. */
+    /* Strip terminate / delete rights from the handle being opened.
+       PROCESS_TERMINATE=0x1 and PROCESS_DELETE=0x2 are the Win32 process
+       access rights; define locally because the kernel headers only expose
+       them behind NTDDI_VERSION guards. DELETE (0x10000) is the generic
+       object-delete right. */
+    #define AEGIS_PROCESS_TERMINATE 0x0001
+    #define AEGIS_PROCESS_DELETE    0x0002
     if (op->Operation == OB_OPERATION_HANDLE_CREATE) {
         if (op->Parameters->CreateHandleInformation.OriginalDesiredAccess &
-            (PROCESS_TERMINATE | PROCESS_DELETE | DELETE)) {
+            (AEGIS_PROCESS_TERMINATE | AEGIS_PROCESS_DELETE | DELETE)) {
             op->Parameters->CreateHandleInformation.DesiredAccess &=
-                ~(PROCESS_TERMINATE | PROCESS_DELETE | DELETE);
+                ~(AEGIS_PROCESS_TERMINATE | AEGIS_PROCESS_DELETE | DELETE);
             if (gClientPort) {
                 AEGIS_EVT_MSG evt = { AEGIS_EVT_SELFDEF_BLOCKED, targetPid, L"", {0} };
                 ULONG rc = 0;
@@ -255,9 +261,9 @@ OB_PREOP_CALLBACK_STATUS AegisObPreOp(PVOID RegistrationContext,
         }
     } else if (op->Operation == OB_OPERATION_HANDLE_DUPLICATE) {
         if (op->Parameters->DuplicateHandleInformation.OriginalDesiredAccess &
-            (PROCESS_TERMINATE | PROCESS_DELETE | DELETE)) {
+            (AEGIS_PROCESS_TERMINATE | AEGIS_PROCESS_DELETE | DELETE)) {
             op->Parameters->DuplicateHandleInformation.DesiredAccess &=
-                ~(PROCESS_TERMINATE | PROCESS_DELETE | DELETE);
+                ~(AEGIS_PROCESS_TERMINATE | AEGIS_PROCESS_DELETE | DELETE);
         }
     }
     return OB_PREOP_SUCCESS;

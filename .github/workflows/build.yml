@@ -40,12 +40,16 @@ jobs:
           Write-Host "SDK_LIB = $SDK_LIB"
 
           # Kernel-mode WDK package (km/fltKernel.h + km/x64/fltMgr.lib) for the driver.
-          # Download the NuGet directly (nuget.exe is not guaranteed on the runner).
+          # Download the NuGet directly with curl.exe (bundled with Git for Windows;
+          # reliable -L redirect handling, unlike Invoke-WebRequest against nuget.org).
           $WDK_VER = "10.0.26100.6584"
           $url = "https://api.nuget.org/v3-flatcontainer/microsoft.windows.wdk.x64/$WDK_VER/microsoft.windows.wdk.x64.$WDK_VER.nupkg"
-          Invoke-WebRequest -Uri $url -OutFile wdk.nupkg
+          curl.exe -fL --retry 3 -o wdk.nupkg "$url"
+          if (-not (Test-Path wdk.nupkg)) { throw "WDK download failed" }
           Expand-Archive -Path wdk.nupkg -DestinationPath wdkpkg -Force
           $pkg = (Get-ChildItem wdkpkg -Directory | Select-Object -First 1).FullName
+          Write-Host "WDK pkg dir = $pkg"
+          Get-ChildItem $pkg -Recurse -Filter fltKernel.h | ForEach-Object { Write-Host "found hdr: $($_.FullName)" }
           # headers live at <pkg>/c/Include/<ver>/km ; libs at <pkg>/c/Lib/<ver>/km/x64
           $WDK_INC = (Get-ChildItem $pkg -Recurse -Directory -Filter km | Where-Object {
                           (Test-Path (Join-Path $_.FullName 'fltKernel.h'))

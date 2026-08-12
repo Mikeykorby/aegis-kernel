@@ -26,7 +26,7 @@
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>_WIN64;_KERNEL_MODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
-      <AdditionalIncludeDirectories>$(WDK_INC)\km;$(SDK_INC)\shared;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(WDK_INC);$(SDK_INC)\shared;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <AdditionalLibraryDirectories>$(WDK_KMLIB);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>

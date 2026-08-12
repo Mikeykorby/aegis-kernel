@@ -10,6 +10,7 @@
     <ProjectGuid>{1A2B3C4D-0001-0002-0003-000000000001}</ProjectGuid>
     <RootNamespace>aegis_kernel</RootNamespace>
     <TargetVersion>Windows10</TargetVersion>
+    <KernelBufferOverflowLib>$(SDK_KMLIB)\BufferOverflowK.lib</KernelBufferOverflowLib>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Label="Configuration">
@@ -23,20 +24,21 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>_WIN64;_KERNEL_MODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(WDK_INC)\km;$(WDK_INC)\shared;$(WDK_INC)\um;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <AdditionalIncludeDirectories>$(WDK_INC)\km;$(WDK_INC)\shared;$(SDK_INC)\shared;$(SDK_INC)\km;$(SDK_INC)\um;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
-      <AdditionalLibraryDirectories>$(WDK_LIB)\km\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>BufferOverflowK.lib;fltMgr.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(WDK_KMLIB);$(SDK_KMLIB);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>ntoskrnl.lib;fltMgr.lib;wdm.lib;BufferOverflowK.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>Native</SubSystem>
       <EntryPointSymbol>DriverEntry</EntryPointSymbol>
+      <LinkIncremental>false</LinkIncremental>
+      <AdditionalOptions>/DRIVER %(AdditionalOptions)</AdditionalOptions>
+      <OutputFile>$(OutDir)aegis_kernel.sys</OutputFile>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="aegis_filter.c" />
-  </ItemGroup>
-  <ItemGroup>
-    <Inf Include="aegis_kernel.inf" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

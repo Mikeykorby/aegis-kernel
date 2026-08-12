@@ -42,11 +42,12 @@ static bool Sha256File(const std::wstring& path, UCHAR out[AEGIS_MAX_HASH]) {
                            OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
     if (f == INVALID_HANDLE_VALUE) { BCryptCloseAlgorithmProvider(h, 0); return false; }
     DWORD n; BYTE buf[65536]; DWORD len = 0;
-    BCryptCreateHash(h, &gHash, nullptr, 0, nullptr, 0, 0);
+    BCRYPT_HASH_HANDLE hHash = NULL;
+    BCryptCreateHash(h, &hHash, nullptr, 0, nullptr, 0, 0);
     while (ReadFile(f, buf, sizeof(buf), &n, nullptr) && n > 0)
-        BCryptHashData(gHash, buf, n, 0);
-    BCryptFinishHash(gHash, out, AEGIS_MAX_HASH, 0);
-    BCryptDestroyHash(gHash);
+        BCryptHashData(hHash, buf, n, 0);
+    BCryptFinishHash(hHash, out, AEGIS_MAX_HASH, 0);
+    BCryptDestroyHash(hHash);
     CloseHandle(f); BCryptCloseAlgorithmProvider(h, 0);
     return true;
 }

@@ -1,25 +1,20 @@
 /* =============================================================================
  * aegis_agent.cpp — Aegis kernel-mode companion agent (user mode, C++).
  *
- * Runs as a normal Windows service/process. Responsibilities:
+ * Runs as a normal Windows process. Responsibilities:
  *   1. Connect to the \AegisKernelPort comm port and stay connected (one agent).
  *   2. On AEGIS_EVT_EXEC_SCAN / heartbeat, ask the Aegis engine (over a named
  *      pipe) whether a path is malicious; if so, send AEGIS_CMD_ADD_DENY_HASH
  *      so the driver blocks the next execute attempt pre-execution.
  *   3. On AEGIS_EVT_RANSOM_BURST, kill the culprit process tree (real-time).
- *   4. On AEGIS_EVT_SELFDEF_BLOCKED, log + toast that something tried to kill
- *      Aegis.
- *   5. Enable self-defense (AEGIS_CMD_SET_SELFDEFENSE + PROTECT_PROC for our PID).
+ *   4. On AEGIS_EVT_SELFDEF_BLOCKED, log that something tried to kill Aegis.
+ *   5. Enable self-defense (AEGIS_CMD_SET_SELFDEFENSE + PROTECT_PROC).
  *
- * This file is plain Win32 + the filter manager user library (fltlib.lib). It
- * does NOT require a code cert to build (it's a normal .exe). It talks to the
- * kernel driver over the documented port protocol in aegis_common.h.
- *
- * Build:  cmake --build  (see CMakeLists.txt at repo root)
- * Run as: aegis_agent.exe   [started by the Aegis desktop app, or as a service]
+ * The filter-manager user API (fltlib) is loaded DYNAMICALLY via
+ * GetProcAddress, so this file builds with only the base Windows SDK
+ * (bcrypt.lib + kernel32.lib) — no WDK user-mode headers required.
  * ========================================================================== */
 #include "aegis_common.h"
-#include <fltUser.h>
 #include <bcrypt.h>
 #include <string>
 #include <vector>
@@ -27,12 +22,44 @@
 #include <atomic>
 #include <windows.h>
 
-#pragma comment(lib, "fltLib.lib")
 #pragma comment(lib, "bcrypt.lib")
+
+/* ---- Filter manager (fltlib.dll) loaded dynamically ---- */
+typedef long HRESULT;
+#ifndef S_OK
+#define S_OK 0L
+#endif
+
+typedef struct _FILTER_MESSAGE_HEADER {
+    DWORD ReplyLength;
+    DWORD MessageId;
+} FILTER_MESSAGE_HEADER, *PFILTER_MESSAGE_HEADER;
+
+typedef HRESULT (WINAPI* PFN_FilterConnectCommunicationPort)(
+    LPCWSTR lpPortName, DWORD dwOptions, LPVOID lpContext,
+    WORD wSizeOfContext, LPSECURITY_ATTRIBUTES lpSecurityAttributes, HANDLE* hPort);
+typedef HRESULT (WINAPI* PFN_FilterSendMessage)(
+    HANDLE hPort, LPVOID lpInBuffer, DWORD dwInBufferSize,
+    LPVOID lpOutBuffer, DWORD dwOutBufferSize, LPDWORD lpBytesReturned);
+typedef HRESULT (WINAPI* PFN_FilterGetMessage)(
+    HANDLE hPort, PVOID lpMessageBuffer, DWORD dwMessageBufferSize, LPOVERLAPPED lpOverlapped);
+
+static PFN_FilterConnectCommunicationPort gFltConnect = nullptr;
+static PFN_FilterSendMessage              gFltSend    = nullptr;
+static PFN_FilterGetMessage               gFltGet     = nullptr;
 
 static HANDLE  gPort = INVALID_HANDLE_VALUE;
 static std::atomic<bool> gRunning{true};
 static const wchar_t* AEGIS_PIPE = L"\\\\.\\pipe\\AegisKernelAgent";
+
+static bool LoadFltLib() {
+    HMODULE h = LoadLibraryW(L"fltlib.dll");
+    if (!h) return false;
+    gFltConnect = (PFN_FilterConnectCommunicationPort)GetProcAddress(h, "FilterConnectCommunicationPort");
+    gFltSend    = (PFN_FilterSendMessage)GetProcAddress(h, "FilterSendMessage");
+    gFltGet     = (PFN_FilterGetMessage)GetProcAddress(h, "FilterGetMessage");
+    return gFltConnect && gFltSend && gFltGet;
+}
 
 /* ---- SHA-256 of a file (BCrypt, no external deps) ---- */
 static bool Sha256File(const std::wstring& path, UCHAR out[AEGIS_MAX_HASH]) {
@@ -75,19 +102,18 @@ static bool EngineVerdict(const std::wstring& path, bool& malicious) {
 
 /* ---- send a command to the driver ---- */
 static bool SendCmd(const AEGIS_CMD_MSG& cmd) {
-    DWORD wrote; DWORD rc = 0;
+    DWORD wrote;
     return gPort != INVALID_HANDLE_VALUE &&
-        FilterSendMessage(gPort, (PVOID)&cmd, sizeof(cmd), nullptr, 0, &wrote) == 0;
+        gFltSend(gPort, (PVOID)&cmd, sizeof(cmd), nullptr, 0, &wrote) == 0;
 }
 
 /* ---- main message loop: read events from the driver ---- */
 static void EventLoop() {
-    BYTE buf[1024];
+    BYTE buf[sizeof(FILTER_MESSAGE_HEADER) + sizeof(AEGIS_EVT_MSG)];
     while (gRunning) {
-        DWORD read = 0;
-        DWORD st = FilterGetMessage(gPort, (PFILTER_MESSAGE)buf, sizeof(buf), nullptr);
-        if (st != 0) { /* disconnected or timeout */ Sleep(500); continue; }
-        auto* evt = (AEGIS_EVT_MSG*)buf;
+        DWORD st = gFltGet(gPort, buf, sizeof(buf), nullptr);
+        if (st != 0) { Sleep(500); continue; }   /* disconnected or timeout */
+        auto* evt = (AEGIS_EVT_MSG*)(buf + sizeof(FILTER_MESSAGE_HEADER));
         switch (evt->Event) {
         case AEGIS_EVT_EXEC_SCAN: {
             bool mal = false;
@@ -104,14 +130,12 @@ static void EventLoop() {
             break;
         }
         case AEGIS_EVT_RANSOM_BURST:
-            /* Kill the responsible process tree (best-effort). */
             if (evt->Pid) {
                 HANDLE hp = OpenProcess(PROCESS_TERMINATE, FALSE, evt->Pid);
                 if (hp) { TerminateProcess(hp, 0); CloseHandle(hp); }
             }
             break;
         case AEGIS_EVT_SELFDEF_BLOCKED:
-            /* Someone tried to kill Aegis — already blocked by the driver. */
             break;
         default: break;
         }
@@ -119,6 +143,8 @@ static void EventLoop() {
 }
 
 int main() {
+    if (!LoadFltLib()) return 2;   /* fltlib.dll missing — cannot talk to driver */
+
     /* 1. enable self-defense for this agent PID */
     {
         AEGIS_CMD_MSG c; memset(&c, 0, sizeof(c));
@@ -127,12 +153,11 @@ int main() {
     }
 
     /* 2. connect to the driver comm port */
-    HRESULT hr = FilterConnectCommunicationPort(AEGIS_PORT_NAME, 0, nullptr, 0, nullptr, &gPort);
+    HRESULT hr = gFltConnect(AEGIS_PORT_NAME, 0, nullptr, 0, nullptr, &gPort);
     if (hr != S_OK) {
-        /* Driver not loaded yet — keep retrying so the agent survives a reboot. */
         for (int i = 0; i < 60 && gPort == INVALID_HANDLE_VALUE; i++) {
             Sleep(2000);
-            FilterConnectCommunicationPort(AEGIS_PORT_NAME, 0, nullptr, 0, nullptr, &gPort);
+            gFltConnect(AEGIS_PORT_NAME, 0, nullptr, 0, nullptr, &gPort);
         }
         if (gPort == INVALID_HANDLE_VALUE) return 1;
     }

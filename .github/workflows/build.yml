@@ -41,10 +41,19 @@ jobs:
           Write-Host "WDK_LIB = $lib"
 
       - name: Build kernel driver (mini-filter)
-        run: msbuild kernel/aegis_kernel.vcxproj /p:Configuration=Release /p:Platform=x64 /p:WDK_INC="${{ steps.wdk.outputs.WDK_INC }}" /p:WDK_LIB="${{ steps.wdk.outputs.WDK_LIB }}"
+        shell: pwsh
+        run: |
+          $msb = &"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -latest -requires Microsoft.Component.MSBuild -find "MSBuild\Current\Bin\amd64\MSBuild.exe" | Select-Object -First 1
+          if (-not $msb) { $msb = "msbuild.exe" }
+          Write-Host "MSBuild = $msb"
+          & $msb kernel/aegis_kernel.vcxproj /p:Configuration=Release /p:Platform=x64 /p:WDK_INC="${{ steps.wdk.outputs.WDK_INC }}" /p:WDK_LIB="${{ steps.wdk.outputs.WDK_LIB }}"
 
       - name: Build user-mode agent
-        run: msbuild agent/aegis_agent.vcxproj /p:Configuration=Release /p:Platform=x64 /p:WDK_INC="${{ steps.wdk.outputs.WDK_INC }}" /p:WDK_LIB="${{ steps.wdk.outputs.WDK_LIB }}"
+        shell: pwsh
+        run: |
+          $msb = &"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -latest -requires Microsoft.Component.MSBuild -find "MSBuild\Current\Bin\amd64\MSBuild.exe" | Select-Object -First 1
+          if (-not $msb) { $msb = "msbuild.exe" }
+          & $msb agent/aegis_agent.vcxproj /p:Configuration=Release /p:Platform=x64 /p:WDK_INC="${{ steps.wdk.outputs.WDK_INC }}" /p:WDK_LIB="${{ steps.wdk.outputs.WDK_LIB }}"
 
       - name: Upload binaries + logs
         if: always()

@@ -24,12 +24,19 @@ jobs:
           Write-Host "MSBuild = $msb"
 
           # --- Windows SDK (user-mode fltUser.h / bcrypt.lib / kernel32.lib) ---
-          $sdk = Get-Item "C:\Program Files (x86)\Windows Kits\10\Include\*" -ErrorAction SilentlyContinue `
-                 | Sort-Object Name | Select-Object -Last 1
-          $SDK_INC   = $sdk.FullName
-          $SDK_KMLIB = "C:\Program Files (x86)\Windows Kits\10\Lib\$($sdk.Name)\km\x64"
-          $SDK_UMLIB = "C:\Program Files (x86)\Windows Kits\10\Lib\$($sdk.Name)\um\x64"
-          if (-not (Test-Path $SDK_KMLIB)) { throw "SDK km lib not found" }
+          $sdkInc = Get-Item "C:\Program Files (x86)\Windows Kits\10\Include\*" -ErrorAction SilentlyContinue `
+                    | Sort-Object Name | Select-Object -Last 1
+          $SDK_INC   = $sdkInc.FullName
+          # SDK lib root can be a differently-named version dir; glob for the real one
+          $sdkLibRoot = Get-Item "C:\Program Files (x86)\Windows Kits\10\Lib\*" -ErrorAction SilentlyContinue `
+                        | Sort-Object Name | Select-Object -Last 1
+          $SDK_KMLIB = (Get-ChildItem $sdkLibRoot.FullName -Recurse -Directory -Filter x64 | Where-Object {
+                          $_.Parent.Name -eq 'km' -and (Test-Path (Join-Path $_.FullName 'ntoskrnl.lib'))
+                       } | Select-Object -First 1).FullName
+          $SDK_UMLIB = (Get-ChildItem $sdkLibRoot.FullName -Recurse -Directory -Filter x64 | Where-Object {
+                          $_.Parent.Name -eq 'um' -and (Test-Path (Join-Path $_.FullName 'kernel32.lib'))
+                       } | Select-Object -First 1).FullName
+          if (-not $SDK_KMLIB -or -not $SDK_UMLIB) { throw "SDK km/um lib not found under $($sdkLibRoot.FullName)" }
           echo "SDK_INC=$SDK_INC"   >> $env:GITHUB_OUTPUT
           echo "SDK_KMLIB=$SDK_KMLIB" >> $env:GITHUB_OUTPUT
           echo "SDK_UMLIB=$SDK_UMLIB" >> $env:GITHUB_OUTPUT

@@ -11,34 +11,49 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Windows Driver Kit
-        uses: nickyc92/WindowsDriverKit@v1
-
-      - name: Resolve WDK include/lib paths
+      - name: Locate or install the WDK
         id: wdk
         shell: pwsh
         run: |
-          $kit = Get-Item "C:\Program Files (x86)\Windows Kits\10\Include\*" | Sort-Object Name | Select-Object -Last 1
-          $ver = $kit.Name
-          $lib = "C:\Program Files (x86)\Windows Kits\10\Lib\$ver"
-          echo "WDK_INC=$($kit.FullName)" >> $env:GITHUB_OUTPUT
+          $inc = $null; $lib = $null
+          # 1) already-installed WDK (GitHub runner may or may not have it)
+          $kit = Get-Item "C:\Program Files (x86)\Windows Kits\10\Include\*" -ErrorAction SilentlyContinue |
+                 Sort-Object Name | Select-Object -Last 1
+          if ($kit) {
+            $inc = $kit.FullName
+            $lib = "C:\Program Files (x86)\Windows Kits\10\Lib\$($kit.Name)"
+          }
+          # 2) otherwise pull the official WDK NuGet package (reliable id-based CDN)
+          if (-not $inc) {
+            nuget install Microsoft.Windows.WDK -Version 10.0.26100.1742 -ExcludeVersion -OutputDirectory wdkpkg | Out-Null
+            $pkg = Get-Item "wdkpkg\Microsoft.Windows.WDK\*" | Select-Object -First 1
+            # walk for the Include root (contains km + shared + um) and Lib\km\x64
+            $inc = (Get-ChildItem $pkg.FullName -Recurse -Directory -Filter km |
+                    Where-Object { Test-Path (Join-Path $_.Parent.FullName 'shared') -PathType Container } |
+                    Select-Object -First 1).Parent.FullName
+            $lib = (Get-ChildItem $pkg.FullName -Recurse -Directory -Filter x64 |
+                    Where-Object { $_.Parent.Name -eq 'km' } | Select-Object -First 1).Parent.FullName
+          }
+          if (-not $inc -or -not $lib) { Write-Error "Could not resolve WDK include/lib"; exit 1 }
+          echo "WDK_INC=$inc" >> $env:GITHUB_OUTPUT
           echo "WDK_LIB=$lib" >> $env:GITHUB_OUTPUT
-          Write-Host "WDK include: $($kit.FullName)"
-          Write-Host "WDK lib:    $lib"
+          Write-Host "WDK_INC = $inc"
+          Write-Host "WDK_LIB = $lib"
 
       - name: Build kernel driver (mini-filter)
-        run: msbuild kernel/aegis_kernel.vcxproj /p:Configuration=Release /p:Platform=x64
+        run: msbuild kernel/aegis_kernel.vcxproj /p:Configuration=Release /p:Platform=x64 /p:WDK_INC="${{ steps.wdk.outputs.WDK_INC }}" /p:WDK_LIB="${{ steps.wdk.outputs.WDK_LIB }}"
 
       - name: Build user-mode agent
         run: msbuild agent/aegis_agent.vcxproj /p:Configuration=Release /p:Platform=x64 /p:WDK_INC="${{ steps.wdk.outputs.WDK_INC }}" /p:WDK_LIB="${{ steps.wdk.outputs.WDK_LIB }}"
 
-      - name: Upload binaries
+      - name: Upload binaries + logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: aegis-kernel-binaries
+          name: aegis-kernel-artifacts
           path: |
             kernel/x64/Release/aegis_kernel.sys
             kernel/x64/Release/aegis_kernel.inf
             agent/x64/Release/aegis_agent.exe
+            wdkpkg/
           if-no-files-found: warn

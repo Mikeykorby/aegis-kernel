@@ -47,7 +47,9 @@ jobs:
           curl.exe -fL --retry 3 -o wdk.nupkg "$url"
           if (-not (Test-Path wdk.nupkg)) { throw "WDK download failed" }
           Expand-Archive -Path wdk.nupkg -DestinationPath wdkpkg -Force
-          $pkg = (Get-ChildItem wdkpkg -Directory | Select-Object -First 1).FullName
+          # NuGet content root is always "c" (never _rels/build which sort first)
+          $pkg = Join-Path $PWD 'wdkpkg' 'c'
+          if (-not (Test-Path $pkg)) { throw "WDK package layout unexpected: no c/ dir" }
           Write-Host "WDK pkg dir = $pkg"
           Get-ChildItem $pkg -Recurse -Filter fltKernel.h | ForEach-Object { Write-Host "found hdr: $($_.FullName)" }
           # headers live at <pkg>/c/Include/<ver>/km ; libs at <pkg>/c/Lib/<ver>/km/x64

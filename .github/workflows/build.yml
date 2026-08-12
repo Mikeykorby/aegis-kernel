@@ -1,0 +1,44 @@
+name: Build Aegis Kernel
+
+on:
+  push:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Windows Driver Kit
+        uses: nickyc92/WindowsDriverKit@v1
+
+      - name: Resolve WDK include/lib paths
+        id: wdk
+        shell: pwsh
+        run: |
+          $kit = Get-Item "C:\Program Files (x86)\Windows Kits\10\Include\*" | Sort-Object Name | Select-Object -Last 1
+          $ver = $kit.Name
+          $lib = "C:\Program Files (x86)\Windows Kits\10\Lib\$ver"
+          echo "WDK_INC=$($kit.FullName)" >> $env:GITHUB_OUTPUT
+          echo "WDK_LIB=$lib" >> $env:GITHUB_OUTPUT
+          Write-Host "WDK include: $($kit.FullName)"
+          Write-Host "WDK lib:    $lib"
+
+      - name: Build kernel driver (mini-filter)
+        run: msbuild kernel/aegis_kernel.vcxproj /p:Configuration=Release /p:Platform=x64
+
+      - name: Build user-mode agent
+        run: msbuild agent/aegis_agent.vcxproj /p:Configuration=Release /p:Platform=x64 /p:WDK_INC="${{ steps.wdk.outputs.WDK_INC }}" /p:WDK_LIB="${{ steps.wdk.outputs.WDK_LIB }}"
+
+      - name: Upload binaries
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aegis-kernel-binaries
+          path: |
+            kernel/x64/Release/aegis_kernel.sys
+            kernel/x64/Release/aegis_kernel.inf
+            agent/x64/Release/aegis_agent.exe
+          if-no-files-found: warn

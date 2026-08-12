@@ -15,9 +15,11 @@
     <Configuration>Release</Configuration>
     <Platform>x64</Platform>
     <PlatformToolset>v143</PlatformToolset>
-    <!-- Application + manual /DRIVER flags: we only have the WDK headers/libs
-         (NuGet), not the full WDK MSBuild driver targets, so we can't use
-         ConfigurationType=Driver. This pattern still yields a valid .sys. -->
+    <!-- Application + manual /SUBSYSTEM:NATIVE + /ENTRY:DriverEntry yields a
+         valid .sys (a native-subsystem PE). We avoid the /DRIVER flag because
+         the NuGet-only package lacks the WDK Driver build targets, and /DRIVER
+         conflicts with MSBuild's default manifest embedding. A manifest resource
+         on a kernel driver is harmless and ignored by the loader. -->
     <ConfigurationType>Application</ConfigurationType>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
@@ -34,10 +36,7 @@
       <SubSystem>Native</SubSystem>
       <EntryPointSymbol>DriverEntry</EntryPointSymbol>
       <LinkIncremental>false</LinkIncremental>
-      <AdditionalOptions>/DRIVER %(AdditionalOptions)</AdditionalOptions>
-      <ManifestFile></ManifestFile>
       <OutputFile>$(OutDir)aegis_kernel.sys</OutputFile>
-      <GenerateManifest>false</GenerateManifest>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>

@@ -1,0 +1,46 @@
+; aegis_kernel.inf -- installer for the Aegis minifilter.
+; Test-signed; requires `bcdedit /set testsigning on` + reboot to load.
+
+[Version]
+Signature   = "$WINDOWS NT$"
+Class       = "ActivityMonitor"           ; minifilter class
+ClassGuid   = {b86dff51-a31e-4bac-b3cf-e8cfcdb0948e}
+Provider    = %ManufacturerName%
+DriverVer   = 08/14/2026,2.2.1.2
+CatalogFile = aegis_kernel.cat
+
+[DestinationDirs]
+DefaultDestDir = 12 ; DIRID_DRIVERS
+
+[Manufacturer]
+%ManufacturerName% = Aegis,NTamd64
+
+[Aegis.NTamd64]
+%Aegis.Service.Desc% = Aegis_Inst, "aegis_kernel"
+
+[Aegis_Inst.NT]
+CopyFiles = Aegis_Inst.CopyFiles
+
+[Aegis_Inst.CopyFiles]
+aegis_kernel.sys
+
+[Aegis_Inst.NT.Services]
+AddService = aegis_kernel,, Aegis_Service_Inst
+
+[Aegis_Service_Inst]
+DisplayName    = %Aegis.Service.Desc%
+ServiceType    = 2                       ; SERVICE_KERNEL_DRIVER
+StartType      = 3                       ; SERVICE_DEMAND_START
+ErrorControl   = 1                       ; SERVICE_ERROR_NORMAL
+ServiceBinary  = %12%\aegis_kernel.sys
+AddReg         = Aegis_Inst.AddReg
+
+[Aegis_Inst.AddReg]
+HKR,"Instances","DefaultInstance",0x00000000,%Aegis.Instance%
+HKR,"Instances\"%Aegis.Instance%,"Altitude",0x00000000,"370100"   ; minifilter altitude
+HKR,"Instances\"%Aegis.Instance%,"Flags",0x00010001,0
+
+[Strings]
+ManufacturerName = "Aegis Security"
+Aegis.Service.Desc = "Aegis Kernel Monitor"
+Aegis.Instance = "Aegis Kernel Monitor Instance"

@@ -13,18 +13,45 @@
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Label="Configuration">
-    <ConfigurationType>Driver</ConfigurationType>
-    <PlatformToolset>WindowsKernelModeDriver10.0</PlatformToolset>
-    <DriverType>WDM</DriverType>
-    <KernelBufferOverflowLib>BufferOverflowK.lib</KernelBufferOverflowLib>
+    <!-- Build with the installed v143 toolset but compile/link as a kernel
+         driver via manual WDK paths. The WindowsKernelModeDriver10.0 toolset
+         is not registered by this WDK install, so we fall back to v143. -->
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <UseDebugLibraries>false</UseDebugLibraries>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <PropertyGroup Label="WDKPaths">
+    <WDKVER>10.0.28000.0</WDKVER>
+    <WDKROOT>C:\Program Files (x86)\Windows Kits\10\</WDKROOT>
+    <WDKINCLUDE>$(WDKROOT)Include\$(WDKVER)</WDKINCLUDE>
+    <WDKLIB>$(WDKROOT)Lib\$(WDKVER)\km\x64</WDKLIB>
+  </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
-      <WarningLevel>Level4</WarningLevel>
+      <WarningLevel>Level3</WarningLevel>
       <TreatWarningAsError>false</TreatWarningAsError>
-      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;_AMD64_;AMD64;_M_AMD64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(WDKINCLUDE)\km;$(WDKINCLUDE)\shared;$(WDKINCLUDE)\um;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <ExceptionHandling>false</ExceptionHandling>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <RuntimeTypeInfo>false</RuntimeTypeInfo>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <CompileAs>CompileAsC</CompileAs>
+      <DisableSpecificWarnings>4201;4214;4100;4127;4189;4324;4996</DisableSpecificWarnings>
     </ClCompile>
+    <Link>
+      <GenerateManifest>false</GenerateManifest>
+      <EmbedManifest>false</EmbedManifest>
+      <AdditionalLibraryDirectories>$(WDKLIB);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>fltMgr.lib;ntoskrnl.lib;BufferOverflowK.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <SubSystem>Native</SubSystem>
+      <AdditionalOptions>/DRIVER /INTEGRITYCHECK /MANIFEST:NO %(AdditionalOptions)</AdditionalOptions>
+      <EntryPointSymbol>DriverEntry</EntryPointSymbol>
+      <GenerateDebugInformation>false</GenerateDebugInformation>
+      <TargetMachine>MachineX64</TargetMachine>
+      <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
+    </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="aegis_kernel.c" />

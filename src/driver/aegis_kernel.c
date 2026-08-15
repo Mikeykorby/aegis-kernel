@@ -25,14 +25,14 @@ static const UNICODE_STRING gStartupPrefix =
  * volume-letter agnostic. */
 
 /* ---- forward decls ---- */
-NTSTATUS DriverEntry(PDRIVER_OBJECT, PUNICODE_STRING);
-NTSTATUS AegisUnload(FLT_FILTER_UNLOAD_FLAGS);
-FLT_PREOP_CALLBACK_STATUS AegisPreCreate(PFLT_CALLBACK_DATA, PCFLT_RELATED_OBJECTS, PVOID*);
-FLT_POSTOP_CALLBACK_STATUS AegisPostCleanup(PFLT_CALLBACK_DATA, PCFLT_RELATED_OBJECTS, PVOID, FLT_POST_OPERATION_FLAGS);
+NTSTATUS NTAPI DriverEntry(PDRIVER_OBJECT, PUNICODE_STRING);
+NTSTATUS NTAPI AegisUnload(FLT_FILTER_UNLOAD_FLAGS);
+FLT_PREOP_CALLBACK_STATUS NTAPI AegisPreCreate(PFLT_CALLBACK_DATA, PCFLT_RELATED_OBJECTS, PVOID*);
+FLT_POSTOP_CALLBACK_STATUS NTAPI AegisPostCleanup(PFLT_CALLBACK_DATA, PCFLT_RELATED_OBJECTS, PVOID, FLT_POST_OPERATION_FLAGS);
 
-NTSTATUS AegisConnectNotify(PFLT_PORT, PVOID, PVOID, ULONG, PVOID*, PULONG);
-void     AegisDisconnectNotify(PVOID);
-NTSTATUS AegisMessageNotify(PVOID, PVOID, ULONG, PVOID, ULONG, PULONG);
+NTSTATUS NTAPI AegisConnectNotify(PFLT_PORT, PVOID, PVOID, ULONG, PVOID*);
+void     NTAPI AegisDisconnectNotify(PVOID);
+NTSTATUS NTAPI AegisMessageNotify(PVOID, PVOID, ULONG, PVOID, ULONG, PULONG);
 
 /* ---- registration ---- */
 const FLT_OPERATION_REGISTRATION Callbacks[] = {
@@ -45,10 +45,14 @@ const FLT_REGISTRATION FilterRegistration = {
     sizeof(FLT_REGISTRATION),
     FLT_REGISTRATION_VERSION,
     0,
-    NULL, NULL,
-    DriverEntry,
-    AegisUnload,
-    NULL, NULL, NULL, NULL, NULL, NULL, NULL
+    NULL,                /* ContextRegistration */
+    Callbacks,           /* OperationRegistration */
+    AegisUnload,         /* FilterUnloadCallback */
+    NULL,                /* InstanceSetupCallback */
+    NULL,                /* InstanceQueryTeardownCallback */
+    NULL,                /* InstanceTeardownStartCallback */
+    NULL,                /* InstanceTeardownCompleteCallback */
+    NULL, NULL, NULL
 };
 
 /* ---- helpers ---- */
@@ -92,7 +96,7 @@ static VOID SendEvent(PFLT_CALLBACK_DATA Data, PCUNICODE_STRING FileName, ULONG 
 
     RtlZeroMemory(&evt, sizeof(evt));
     evt.MessageId = AEGIS_MSG_EVENT;
-    KeQuerySystemTime(&evt.Timestamp);
+    KeQuerySystemTimePrecise(&evt.Timestamp);
     evt.Pid = (ULONG)(ULONG_PTR)PsGetCurrentProcessId();
     evt.Reason = Reason;
     evt.Severity = Severity;
@@ -117,10 +121,10 @@ static VOID SendEvent(PFLT_CALLBACK_DATA Data, PCUNICODE_STRING FileName, ULONG 
 }
 
 /* ---- callbacks ---- */
-FLT_PREOP_CALLBACK_STATUS AegisPreCreate(
+FLT_PREOP_CALLBACK_STATUS NTAPI AegisPreCreate(
     PFLT_CALLBACK_DATA Data, PCFLT_RELATED_OBJECTS FltObjects, PVOID *CompletionContext)
 {
-    PUNICODE_STRING name = NULL;
+    PFLT_FILE_NAME_INFORMATION name = NULL;
     NTSTATUS st;
 
     if (!FltObjects->FileObject) return FLT_PREOP_SUCCESS_NO_CALLBACK;
@@ -128,9 +132,9 @@ FLT_PREOP_CALLBACK_STATUS AegisPreCreate(
     st = FltGetFileNameInformation(Data,
             FLT_FILE_NAME_NORMALIZED | FLT_FILE_NAME_QUERY_DEFAULT, &name);
     if (NT_SUCCESS(st)) {
-        if (IsSuspicious(name, Data->Iopb->Parameters.Create.SecurityContext
+        if (IsSuspicious(&name->Name, Data->Iopb->Parameters.Create.SecurityContext
                             ? Data->Iopb->Parameters.Create.SecurityContext->DesiredAccess : 0)) {
-            SendEvent(Data, name, AEGIS_REASON_TEMP_EXEC, 1);
+            SendEvent(Data, &name->Name, AEGIS_REASON_TEMP_EXEC, 1);
         }
         FltReleaseFileNameInformation(name);
     }
@@ -138,7 +142,7 @@ FLT_PREOP_CALLBACK_STATUS AegisPreCreate(
     return FLT_PREOP_SUCCESS_NO_CALLBACK;
 }
 
-FLT_POSTOP_CALLBACK_STATUS AegisPostCleanup(
+FLT_POSTOP_CALLBACK_STATUS NTAPI AegisPostCleanup(
     PFLT_CALLBACK_DATA Data, PCFLT_RELATED_OBJECTS FltObjects, PVOID CompletionContext,
     FLT_POST_OPERATION_FLAGS Flags)
 {
@@ -150,13 +154,13 @@ FLT_POSTOP_CALLBACK_STATUS AegisPostCleanup(
 }
 
 /* ---- port callbacks ---- */
-NTSTATUS AegisConnectNotify(PFLT_PORT Port, PVOID ServerPortCookie,
+NTSTATUS NTAPI AegisConnectNotify(PFLT_PORT Port, PVOID ServerPortCookie,
         PVOID ConnectionContext, ULONG SizeOfContext, PVOID *ConnectionCookie)
 {
     NTSTATUS st = STATUS_SUCCESS;
     FltAcquirePushLockExclusive(&gClientLock);
     if (gClientPort) { st = STATUS_CONNECTION_IN_USE; }
-    else { gClientPort = Port; FltReferenceClientPort(Port); }
+    else { gClientPort = Port; }
     FltReleasePushLock(&gClientLock);
     UNREFERENCED_PARAMETER(ServerPortCookie);
     UNREFERENCED_PARAMETER(ConnectionContext);
@@ -165,7 +169,7 @@ NTSTATUS AegisConnectNotify(PFLT_PORT Port, PVOID ServerPortCookie,
     return st;
 }
 
-VOID AegisDisconnectNotify(PVOID ConnectionCookie)
+VOID NTAPI AegisDisconnectNotify(PVOID ConnectionCookie)
 {
     FltAcquirePushLockExclusive(&gClientLock);
     if (gClientPort) { FltCloseClientPort(gFilter, &gClientPort); gClientPort = NULL; }
@@ -173,7 +177,7 @@ VOID AegisDisconnectNotify(PVOID ConnectionCookie)
     UNREFERENCED_PARAMETER(ConnectionCookie);
 }
 
-NTSTATUS AegisMessageNotify(PVOID PortCookie, PVOID InputBuffer, ULONG InputBufferLength,
+NTSTATUS NTAPI AegisMessageNotify(PVOID PortCookie, PVOID InputBuffer, ULONG InputBufferLength,
         PVOID OutputBuffer, ULONG OutputBufferLength, PULONG ReturnOutputBufferLength)
 {
     /* We only send driver->svc; ignore svc->driver messages for now. */
@@ -187,7 +191,7 @@ NTSTATUS AegisMessageNotify(PVOID PortCookie, PVOID InputBuffer, ULONG InputBuff
 }
 
 /* ---- driver entry / unload ---- */
-NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
+NTSTATUS NTAPI DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
 {
     NTSTATUS st;
     OBJECT_ATTRIBUTES oa;
@@ -229,7 +233,7 @@ fail:
     return st;
 }
 
-NTSTATUS AegisUnload(FLT_FILTER_UNLOAD_FLAGS Flags)
+NTSTATUS NTAPI AegisUnload(FLT_FILTER_UNLOAD_FLAGS Flags)
 {
     UNREFERENCED_PARAMETER(Flags);
     if (gServerPort) FltCloseCommunicationPort(gServerPort);

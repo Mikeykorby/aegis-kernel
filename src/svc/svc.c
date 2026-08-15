@@ -11,10 +11,10 @@
 #include <fltUser.h>
 #include <stdio.h>
 #include <psapi.h>
-#include "..\driver\aegis_kernel.h"
+#include "aegis_proto.h"
 
 #define AEGIS_ENGINE_URL "http://127.0.0.1:26270/api/kernel_event"
-#define AEGIS_LOG        "C:\\ProgramData\\Aegis\\kernel_events.log"
+#define AEGIS_LOG        L"C:\\ProgramData\\Aegis\\kernel_events.log"
 
 static volatile BOOL gStop = FALSE;
 
